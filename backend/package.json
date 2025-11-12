@@ -1,16 +1,22 @@
 {
-  "name": "quantum-shield-backend",
+  "name": "quantumshield-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Backend for QuantumShield",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
   },
   "dependencies": {
+    "bcrypt": "^5.1.0",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "socket.io": "^4.7.2"
+    "jsonwebtoken": "^9.0.0",
+    "multer": "^1.4.5-lts.1",
+    "socket.io": "^4.5.4",
+    "sqlite3": "^5.1.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.1.10"
   }
 }

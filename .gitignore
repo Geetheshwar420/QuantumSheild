@@ -1,4 +1,34 @@
-node_modules/
+# SQLite database files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
