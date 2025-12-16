@@ -942,18 +942,18 @@ let falconInstance;
 
 const loadMLKEM1024 = async () => {
   if (!mlkemInstance) {
-    // Use npm package instead of public files (fixes ES module import.meta issue)
-    const { default: LibOQS } = await import('@openforge-sh/liboqs/ml-kem-1024');
-    mlkemInstance = await LibOQS();
+    // Use npm package with correct export path
+    const { createMLKEM1024 } = await import('@openforge-sh/liboqs');
+    mlkemInstance = await createMLKEM1024();
   }
   return mlkemInstance;
 };
 
 const loadFalcon1024 = async () => {
   if (!falconInstance) {
-    // Use npm package instead of public files (fixes ES module import.meta issue)
-    const { default: LibOQS } = await import('@openforge-sh/liboqs/falcon-1024');
-    falconInstance = await LibOQS();
+    // Use npm package with correct export path
+    const { createFalcon1024 } = await import('@openforge-sh/liboqs');
+    falconInstance = await createFalcon1024();
   }
   return falconInstance;
 };
