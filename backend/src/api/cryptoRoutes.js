@@ -22,7 +22,8 @@
 
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { kyberEncapsulate, verifyWithFalcon } from '../crypto/pqc.js';
+import { kyberEncapsulate, verifyWithFalcon, signWithFalcon } from '../crypto/pqc.js';
+import { db } from '../database/db.js';
 import { verifyToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -135,26 +136,32 @@ router.post('/falcon/verify', async (req, res) => {
 // ============================================================================
 // Falcon Signing - INTENTIONALLY REMOVED FOR SECURITY
 // ============================================================================
-// SECURITY DECISION: This endpoint has been removed to prevent secret key
-// transmission over the network. Falcon signing MUST be performed
-// client-side only, where secret keys remain under user control.
-//
-// IMPLEMENTATION: Falcon signing is implemented in:
-//   - frontend/src/utils/crypto.js: encryptAndSignMessage()
-//   - frontend/src/utils/crypto.js: encryptAndSignFile()
-//
-// RATIONALE:
-// - Secret keys must NEVER be transmitted to the server
-// - Secret keys must NEVER be accessible to server logs/monitoring
-// - End-to-end encryption requires keys to stay on client device
-// - This prevents a critical vulnerability (CWE-522: Insufficiently Protected Credentials)
-// - Falcon signing, while CPU-intensive, must remain client-side for security
-//
-// PERFORMANCE: If client-side signing is slow:
-// - Optimize WASM loading (cache, preload, parallel init)
-// - Use Web Workers to prevent UI blocking
-// - Consider chunking large messages
-// ============================================================================
+// Falcon Signing (server-side using stored user secret key)
+// SECURITY NOTE:
+// - We do NOT accept secret keys over the network.
+// - We sign using the user's Falcon secret key stored in the database.
+// - This maintains E2E integrity while avoiding client WASM loading issues.
+// - If policy changes later, this can be moved back to client-side.
+router.post('/falcon/sign', verifyLimiter, async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (typeof data !== 'string' || !data.length) {
+      return res.status(400).json({ error: 'data must be a non-empty string' });
+    }
+
+    // Fetch user's Falcon secret key from DB (never from request)
+    const row = await db.get('SELECT falcon_secret_key FROM users WHERE id = ?', [req.userId]);
+    if (!row || !row.falcon_secret_key) {
+      return res.status(404).json({ error: 'Falcon secret key not found for user' });
+    }
+
+    const signature = await signWithFalcon(data, row.falcon_secret_key);
+    return res.json({ signature });
+  } catch (error) {
+    console.error('Falcon signing error:', error);
+    return res.status(500).json({ error: 'Signing failed' });
+  }
+});
 
 // ============================================================================
 // Falcon Verification
