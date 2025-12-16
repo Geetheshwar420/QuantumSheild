@@ -22,7 +22,7 @@
 
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { kyberEncapsulate, verifyWithFalcon, signWithFalcon } from '../crypto/pqc.js';
+import { kyberEncapsulate, verifyWithFalcon, signWithFalcon, generateFalconKeys } from '../crypto/pqc.js';
 import { db } from '../database/db.js';
 import { verifyToken } from '../middleware/authMiddleware.js';
 
@@ -150,9 +150,19 @@ router.post('/falcon/sign', verifyLimiter, async (req, res) => {
     }
 
     // Fetch user's Falcon secret key from DB (never from request)
-    const row = await db.get('SELECT falcon_secret_key FROM users WHERE id = ?', [req.userId]);
+    let row = await db.get('SELECT falcon_secret_key FROM users WHERE id = ?', [req.userId]);
+
+    // Lazy-generate Falcon keys if missing (backfill for legacy users)
     if (!row || !row.falcon_secret_key) {
-      return res.status(404).json({ error: 'Falcon secret key not found for user' });
+      try {
+        const { publicKey, secretKey } = await generateFalconKeys();
+        await db.run('UPDATE users SET falcon_public_key = ?, falcon_secret_key = ? WHERE id = ?', [publicKey, secretKey, req.userId]);
+        row = { falcon_secret_key: secretKey };
+        console.log(`Backfilled Falcon keys for user ${req.userId}`);
+      } catch (genErr) {
+        console.error('Failed to backfill Falcon keys:', genErr);
+        return res.status(500).json({ error: 'Unable to create signing keys for user' });
+      }
     }
 
     const signature = await signWithFalcon(data, row.falcon_secret_key);
