@@ -6,7 +6,14 @@ import { useSocket } from '../context/SocketContext';
 import { initializeSecureKeys } from '../utils/crypto';
 
 // Normalize API_URL: strip trailing slashes and remove trailing "/api" if present
-const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001')
+const API_URL = (() => {
+  const envUrl = process.env.REACT_APP_API_URL;
+  if (envUrl && envUrl.trim()) return envUrl.trim();
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('REACT_APP_API_URL is not set for production build');
+  }
+  return 'http://localhost:3001';
+})()
   .replace(/\/+$/, '') // Remove trailing slashes
   .replace(/\/api$/, ''); // Remove trailing "/api" if present
 

@@ -3,7 +3,14 @@ import io from 'socket.io-client';
 
 const SocketContext = createContext(null);
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001'; // Development only - use HTTPS in production
+const SOCKET_URL = (() => {
+  const envUrl = process.env.REACT_APP_SOCKET_URL || process.env.REACT_APP_API_URL;
+  if (envUrl && envUrl.trim()) return envUrl.trim();
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('REACT_APP_SOCKET_URL is not set for production build');
+  }
+  return 'http://localhost:3001';
+})()
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);

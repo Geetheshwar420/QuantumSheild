@@ -7,7 +7,14 @@
 
 import axios from 'axios';
 
-const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001')
+const API_URL = (() => {
+  const envUrl = process.env.REACT_APP_API_URL;
+  if (envUrl && envUrl.trim()) return envUrl.trim();
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('REACT_APP_API_URL is not set for production build');
+  }
+  return 'http://localhost:3001';
+})()
   .replace(/\/+$/, '')
   .replace(/\/api$/, '');
 
