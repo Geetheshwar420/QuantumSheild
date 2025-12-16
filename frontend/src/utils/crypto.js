@@ -937,54 +937,24 @@ export const verifyAndDecryptFile = async (
 // WASM LOADING HELPERS (Client-side ML-KEM-1024 and Falcon-1024)
 // ----------------------------------------------------------------------------
 
-let mlkemScriptLoaded;
-let falconScriptLoaded;
-
-const loadScriptOnce = (src) => {
-  return new Promise((resolve, reject) => {
-    // Avoid duplicate loads
-    const existing = Array.from(document.scripts).find((s) => s.src.includes(src));
-    if (existing) {
-      if (existing.dataset.loaded === 'true') return resolve();
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', (e) => reject(e));
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = src;
-    script.type = 'module'; // Required for WASM files with import.meta
-    script.async = true;
-    script.defer = true;
-    script.addEventListener('load', () => {
-      script.dataset.loaded = 'true';
-      resolve();
-    });
-    script.addEventListener('error', (e) => reject(e));
-    document.head.appendChild(script);
-  });
-};
+let mlkemInstance;
+let falconInstance;
 
 const loadMLKEM1024 = async () => {
-  if (!mlkemScriptLoaded) {
-    mlkemScriptLoaded = loadScriptOnce('/ml-kem-1024.min.js');
+  if (!mlkemInstance) {
+    // Use npm package instead of public files (fixes ES module import.meta issue)
+    const { default: LibOQS } = await import('@openforge-sh/liboqs/ml-kem-1024');
+    mlkemInstance = await LibOQS();
   }
-  await mlkemScriptLoaded;
-  if (typeof window.createMLKEM1024 !== 'function') {
-    throw new Error('ML-KEM-1024 WASM not available');
-  }
-  // Create a fresh instance per operation to avoid state issues
-  return await window.createMLKEM1024();
+  return mlkemInstance;
 };
 
 const loadFalcon1024 = async () => {
-  if (!falconScriptLoaded) {
-    falconScriptLoaded = loadScriptOnce('/falcon-1024.min.js');
+  if (!falconInstance) {
+    // Use npm package instead of public files (fixes ES module import.meta issue)
+    const { default: LibOQS } = await import('@openforge-sh/liboqs/falcon-1024');
+    falconInstance = await LibOQS();
   }
-  await falconScriptLoaded;
-  if (typeof window.createFalcon1024 !== 'function') {
-    throw new Error('Falcon-1024 WASM not available');
-  }
-  // Create a fresh instance per operation to avoid state issues
-  return await window.createFalcon1024();
+  return falconInstance;
 };
 
