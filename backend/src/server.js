@@ -254,33 +254,33 @@ io.on('connection', (socket) => {
       }
 
       // Get sender's Falcon public key to verify signature
-      const senderKeyStmt = db.prepare('SELECT falcon_public_key FROM users WHERE id = ?');
-      senderKeyStmt.get(senderId, async (err, senderUser) => {
-        if (err || !senderUser) {
-          return socket.emit('messageError', { error: 'Failed to verify sender' });
-        }
+    const senderKeyStmt = db.prepare('SELECT falcon_public_key, username FROM users WHERE id = ?');
+    senderKeyStmt.get(senderId, async (err, senderUser) => {
+      if (err || !senderUser) {
+        return socket.emit('messageError', { error: 'Failed to verify sender' });
+      }
 
-        // Verify Falcon signature (async)
-        try {
-          // Canonical signature payload must match frontend
-          const dataToVerify = JSON.stringify({ c: encryptedMessage, i: iv, t: authTag });
-          const isValid = await verifyWithFalcon(dataToVerify, signature, senderUser.falcon_public_key);
-          
-          if (!isValid) {
-            console.log('Message rejected: Invalid signature', { senderId, receiverId });
-            return socket.emit('messageError', { error: 'Invalid message signature - message may be tampered' });
-          }
-        } catch (err) {
-          console.error('Signature verification failed:', err);
-          return socket.emit('messageError', { error: 'Failed to verify message signature' });
+      // Verify Falcon signature (async)
+      try {
+        // Canonical signature payload must match frontend
+        const dataToVerify = JSON.stringify({ c: encryptedMessage, i: iv, t: authTag });
+        const isValid = await verifyWithFalcon(dataToVerify, signature, senderUser.falcon_public_key);
+        
+        if (!isValid) {
+          console.log('Message rejected: Invalid signature', { senderId, receiverId });
+          return socket.emit('messageError', { error: 'Invalid message signature - message may be tampered' });
         }
+      } catch (err) {
+        console.error('Signature verification failed:', err);
+        return socket.emit('messageError', { error: 'Failed to verify message signature' });
+      }
 
-        // NO STORAGE - Messages are only transmitted in real-time
-        // This provides forward secrecy and ensures no message history
-        const messageData = {
-          id: Date.now(), // Temporary ID for UI tracking
-          senderId,
-          receiverId,
+      // NO STORAGE - Messages are only transmitted in real-time
+      // This provides forward secrecy and ensures no message history
+      const messageData = {
+        id: Date.now(), // Temporary ID for UI tracking
+        senderId,
+        senderName: senderUser.username, // Include sender's username for notifications
           encryptedMessage,
           kyberCiphertext,
           iv,
@@ -345,7 +345,7 @@ io.on('connection', (socket) => {
 
     // Verify signature using Falcon (canonical JSON payload)
     const dataToVerify = JSON.stringify({ c: fileData, i: iv, t: authTag });
-    db.get('SELECT falcon_public_key FROM users WHERE id = ?', [senderId], async (err, sender) => {
+    db.get('SELECT falcon_public_key, username FROM users WHERE id = ?', [senderId], async (err, sender) => {
       try {
         if (err || !sender) {
           console.error('✗ File transfer error: Sender not found', { senderId, error: err?.message });
@@ -367,6 +367,7 @@ io.on('connection', (socket) => {
         const fileTransferData = {
           fileId: `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           senderId,
+          senderName: sender.username, // Include sender's username for notifications
           receiverId,
           fileName,
           fileSize,
