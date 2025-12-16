@@ -952,6 +952,7 @@ const loadScriptOnce = (src) => {
     }
     const script = document.createElement('script');
     script.src = src;
+    script.type = 'module'; // Required for WASM files with import.meta
     script.async = true;
     script.defer = true;
     script.addEventListener('load', () => {
