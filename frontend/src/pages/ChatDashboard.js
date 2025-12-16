@@ -145,15 +145,14 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
       return; // No contact selected, ignore message
     }
     
-    // Check if message is from or to the selected contact
-    const isRelevantMessage = 
-      data.senderId === currentContact.friend_id || 
-      data.receiverId === currentContact.friend_id;
+    // Message is relevant if it's from the selected contact (p2p delivery model)
+    const isRelevantMessage = data.senderId === currentContact.friend_id;
     
     console.log('🔍 Message relevance check:', {
       isRelevantMessage,
       senderMatches: data.senderId === currentContact.friend_id,
-      receiverMatches: data.receiverId === currentContact.friend_id
+      messageSenderId: data.senderId,
+      selectedContactId: currentContact.friend_id
     });
     
     if (isRelevantMessage) {
@@ -186,8 +185,11 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
           senderPublicKey = publicKeyCache.current.get(data.senderId);
           console.log('✓ Sender public key retrieved from cache');
         } else {
-          // Fetch from API only if not cached
-          const senderResponse = await axios.get(`${API_URL}/api/users/${data.senderId}/keys`);
+          // Fetch from API only if not cached (include JWT for authentication)
+          const token = localStorage.getItem('token');
+          const senderResponse = await axios.get(`${API_URL}/api/users/${data.senderId}/keys`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
           senderPublicKey = senderResponse.data.falconPublicKey;
           // Cache the public key for future messages from this sender
           publicKeyCache.current.set(data.senderId, senderPublicKey);
