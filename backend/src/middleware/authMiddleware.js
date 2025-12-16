@@ -31,6 +31,9 @@ const verifyToken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
+    // Provide commonly used convenience fields
+    req.userId = decoded.id;
+    req.username = decoded.username;
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
