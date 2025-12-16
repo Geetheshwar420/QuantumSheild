@@ -39,6 +39,9 @@ import { initializeDatabase } from './config/database.js';
 
 const app = express();
 
+// Behind a proxy (Render/Heroku/etc.) so trust X-Forwarded-* headers for rate limiting/IP
+app.set('trust proxy', 1);
+
 // CORS Configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -259,7 +262,8 @@ io.on('connection', (socket) => {
 
         // Verify Falcon signature (async)
         try {
-          const dataToVerify = encryptedMessage + iv + authTag;
+          // Canonical signature payload must match frontend
+          const dataToVerify = JSON.stringify({ c: encryptedMessage, i: iv, t: authTag });
           const isValid = await verifyWithFalcon(dataToVerify, signature, senderUser.falcon_public_key);
           
           if (!isValid) {
@@ -339,8 +343,8 @@ io.on('connection', (socket) => {
       return socket.emit('fileError', { error: 'Receiver ID required' });
     }
 
-    // Verify signature using Falcon
-    const dataToVerify = fileData + iv + authTag;
+    // Verify signature using Falcon (canonical JSON payload)
+    const dataToVerify = JSON.stringify({ c: fileData, i: iv, t: authTag });
     db.get('SELECT falcon_public_key FROM users WHERE id = ?', [senderId], async (err, sender) => {
       try {
         if (err || !sender) {
