@@ -37,6 +37,7 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
   const [fileTransferStatus, setFileTransferStatus] = useState('');
   const [pendingFiles, setPendingFiles] = useState([]); // List of decrypted files awaiting user action
   const [hasKeys, setHasKeys] = useState(false);
+  const [notification, setNotification] = useState(null); // { type, senderId, senderName, preview, timestamp }
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const { socket, isConnected, connectSocket, disconnectSocket } = useSocket();
@@ -140,19 +141,15 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
     
     // Only append messages for the currently selected contact
     const currentContact = selectedContactRef.current;
-    if (!currentContact) {
-      console.log('⚠️ No contact selected, ignoring message');
-      return; // No contact selected, ignore message
-    }
     
-    // Message is relevant if it's from the selected contact (p2p delivery model)
-    const isRelevantMessage = data.senderId === currentContact.friend_id;
+    // Message is relevant if it's from a known contact (p2p delivery model)
+    const isRelevantMessage = true; // We'll validate sender against friends list
     
     console.log('🔍 Message relevance check:', {
       isRelevantMessage,
-      senderMatches: data.senderId === currentContact.friend_id,
       messageSenderId: data.senderId,
-      selectedContactId: currentContact.friend_id
+      selectedContactId: currentContact?.friend_id,
+      contactSelected: !!currentContact
     });
     
     if (isRelevantMessage) {
@@ -205,11 +202,17 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
           signature: data.signature
         };
 
+        // Get JWT token for decapsulation
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('No JWT token found - user may be logged out');
+        }
+
         // Decrypt the message
         console.log('🔓 Decrypting message...');
         const decryptedText = await verifyAndDecryptMessage(
           messageBundle,
-          userKeys.kyberSecretKey,
+          token,
           senderPublicKey
         );
         
@@ -221,8 +224,31 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
           message: decryptedText // Replace encrypted message with decrypted text
         };
 
-        setMessages((prev) => [...prev, decryptedMessage]);
-        console.log('✓ Message added to chat');
+        // If no contact is selected, notify user about the message
+        if (!currentContact) {
+          console.log(`🔔 Message from user ${data.senderId}, but no contact selected. Notifying user.`);
+          setNotification({
+            type: 'new-message',
+            senderId: data.senderId,
+            senderName: data.senderName || `User ${data.senderId}`,
+            preview: decryptedText.substring(0, 50) + (decryptedText.length > 50 ? '...' : ''),
+            timestamp: new Date().toLocaleTimeString()
+          });
+        } else if (data.senderId === currentContact.friend_id) {
+          // Contact is selected and message is from them, add to chat
+          setMessages((prev) => [...prev, decryptedMessage]);
+          console.log('✓ Message added to chat');
+        } else {
+          // Message is from different contact than selected, notify user
+          console.log(`🔔 Message from user ${data.senderId}, but different contact (${currentContact.friend_id}) selected. Notifying user.`);
+          setNotification({
+            type: 'new-message',
+            senderId: data.senderId,
+            senderName: data.senderName || `User ${data.senderId}`,
+            preview: decryptedText.substring(0, 50) + (decryptedText.length > 50 ? '...' : ''),
+            timestamp: new Date().toLocaleTimeString()
+          });
+        }
       } catch (err) {
         console.error('Message decryption failed:', err);
         setError('Failed to decrypt message');
@@ -654,6 +680,38 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Notification Toast for unselected contact messages */}
+      {notification && (
+        <div className="fixed top-20 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-sm z-50">
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <p className="font-semibold">📨 New message from {notification.senderName}</p>
+              <p className="text-sm mt-1 text-blue-100">{notification.preview}</p>
+              <p className="text-xs text-blue-200 mt-1">{notification.timestamp}</p>
+            </div>
+            <button
+              onClick={() => {
+                // Find and select the contact
+                const sender = friends.find(f => f.friend_id === notification.senderId);
+                if (sender) {
+                  setSelectedContact(sender);
+                  setNotification(null);
+                }
+              }}
+              className="ml-2 px-3 py-1 bg-white text-blue-600 rounded text-sm font-semibold hover:bg-blue-50"
+            >
+              Open
+            </button>
+            <button
+              onClick={() => setNotification(null)}
+              className="ml-1 text-blue-200 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Top bar */}
       <div className="w-full bg-[#00a884] text-white">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">

@@ -1,28 +1,30 @@
 // ============================================================================
 // CRYPTO API ROUTES - Server-side encryption operations
 // ============================================================================
-// Handles ONLY operations that involve PUBLIC data:
+// Handles ONLY operations that involve PUBLIC data and AUTHENTICATED secret data:
 // - Kyber Encapsulation (uses only PUBLIC keys, safe server-side)
-// - Falcon Signing (done on client only - see frontend/src/utils/crypto.js)
+// - Kyber Decapsulation (uses user's secret key from DB via JWT auth, never transmitted)
+// - Falcon Signing (uses user's secret key from DB via JWT auth, never transmitted)
 // - Falcon Verification (uses only PUBLIC keys, safe server-side)
 //
 // CRITICAL SECURITY DECISIONS:
-// - Kyber DECAPSULATION: Performed CLIENT-SIDE ONLY (secret keys never leave client)
-// - Falcon SIGNING: Performed CLIENT-SIDE ONLY (secret keys never leave client)
-// - Secret keys are NEVER accepted in request bodies
-// - All operations with secret data stay on the client device
+// - Kyber DECAPSULATION: Server-side with DB-stored secret keys (like Falcon signing)
+// - Falcon SIGNING: Server-side with DB-stored secret keys
+// - Secret keys are ONLY fetched from DB, NEVER accepted in request bodies
+// - All operations with secret data use JWT auth to identify the user
 // ============================================================================
 // SECURITY:
 // - All routes require JWT authentication (verifyToken)
 // - Strict rate limiting to prevent DoS via expensive PQC operations
 // - Encapsulation: 10 requests per minute (CPU intensive)
+// - Decapsulation: 20 requests per minute (CPU intensive)
+// - Signing: 20 requests per minute (CPU intensive)
 // - Verification: 20 requests per minute (CPU intensive)
-// - NO DECAPSULATION ENDPOINT (secret keys must never be transmitted)
 // ============================================================================
 
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { kyberEncapsulate, verifyWithFalcon, signWithFalcon, generateFalconKeys } from '../crypto/pqc.js';
+import { kyberEncapsulate, kyberDecapsulate, verifyWithFalcon, signWithFalcon, generateFalconKeys } from '../crypto/pqc.js';
 import { db } from '../database/db.js';
 import { verifyToken } from '../middleware/authMiddleware.js';
 
@@ -44,6 +46,24 @@ const verifyLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 20, // 20 requests per minute per user
   message: 'Too many signature verification requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.userId?.toString() || req.ip
+});
+
+const decapsulateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20, // 20 requests per minute per user
+  message: 'Too many decapsulation requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.userId?.toString() || req.ip
+});
+
+const signLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20, // 20 requests per minute per user
+  message: 'Too many signing requests, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.userId?.toString() || req.ip
@@ -108,41 +128,54 @@ router.post('/kyber/encapsulate', encapsulateLimiter, async (req, res) => {
 });
 
 // ============================================================================
-router.post('/falcon/verify', async (req, res) => {
+// Kyber Decapsulation
+// ============================================================================
+// Protected: Authentication required, rate limiting (20/min)
+// Uses the authenticated user's Kyber secret key from DB
+// Client provides ciphertext; server recovers the shared secret
+// Secret key never leaves server; decapsulation output is sent to client
+router.post('/kyber/decapsulate', decapsulateLimiter, async (req, res) => {
   try {
-    const { message, signature, publicKey } = req.body;
-    
-    if (!message || !signature || !publicKey) {
-      return res.status(400).json({ error: 'message, signature, and publicKey are required' });
+    const { ciphertext } = req.body;
+
+    // Validate presence and type
+    if (typeof ciphertext !== 'string' || ciphertext.length === 0) {
+      return res.status(400).json({ error: 'ciphertext must be a non-empty base64 string' });
     }
 
-    const isValid = await verifyWithFalcon(message, signature, publicKey);
-    
-    res.json({ isValid });
+    // Fetch user's Kyber secret key from DB (never from request body)
+    const row = await db.get('SELECT kyber_secret_key FROM users WHERE id = ?', [req.userId]);
+
+    if (!row || !row.kyber_secret_key) {
+      console.error(`Kyber secret key not found for user ${req.userId}`);
+      return res.status(500).json({ error: 'User Kyber keys not initialized' });
+    }
+
+    console.log(`Kyber decapsulation for user ${req.userId}`);
+
+    // Decapsulate using user's secret key
+    const sharedSecret = await kyberDecapsulate(ciphertext, row.kyber_secret_key);
+
+    // Ensure consistent base64 output
+    const sharedSecretB64 = Buffer.isBuffer(sharedSecret)
+      ? sharedSecret.toString('base64')
+      : Buffer.from(sharedSecret).toString('base64');
+
+    res.json({ sharedSecret: sharedSecretB64 });
   } catch (error) {
-    console.error('Falcon verification error:', error);
-    res.status(500).json({ error: 'Verification failed' });
+    console.error('Kyber decapsulation error:', error);
+    res.status(500).json({ error: 'Decapsulation failed' });
   }
-});// - Secret keys must NEVER be accessible to server logs/monitoring
-// - End-to-end encryption requires keys to stay on client device
-// - This prevents a critical vulnerability (CWE-522: Insufficiently Protected Credentials)
-//
-// If decapsulation was attempted server-side for performance:
-// - Use client-side WASM (fix browser compatibility if needed)
-// - Use pure JavaScript implementation (slower but portable)
-// - Ensure WASM modules are properly loaded and initialized
-// ============================================================================
+});
 
 // ============================================================================
-// Falcon Signing - INTENTIONALLY REMOVED FOR SECURITY
+// Falcon Signing
 // ============================================================================
-// Falcon Signing (server-side using stored user secret key)
-// SECURITY NOTE:
-// - We do NOT accept secret keys over the network.
-// - We sign using the user's Falcon secret key stored in the database.
-// - This maintains E2E integrity while avoiding client WASM loading issues.
-// - If policy changes later, this can be moved back to client-side.
-router.post('/falcon/sign', verifyLimiter, async (req, res) => {
+// Protected: Authentication required, rate limiting (20/min)
+// Uses the authenticated user's Falcon secret key from DB
+// Client provides canonical JSON data to sign; server produces signature
+// Secret key never leaves server
+router.post('/falcon/sign', signLimiter, async (req, res) => {
   try {
     const { data } = req.body;
     if (typeof data !== 'string' || !data.length) {

@@ -144,27 +144,33 @@ const kyberEncapsulate = async (receiverPublicKeyBase64) => {
 };
 
 /**
- * Kyber Decapsulation - Recover shared secret from ciphertext
- * CLIENT-SIDE ONLY: Never transmit secret keys to the server
+ * Kyber Decapsulation - Server-side using stored user secret key
+ * Calls backend /api/crypto/kyber/decapsulate to avoid WASM loading issues
+ * Backend recovers the shared secret using user's DB-stored Kyber secret key
  */
-const kyberDecapsulate = async (ciphertextBase64, secretKeyBase64) => {
-  let kem;
+const kyberDecapsulate = async (ciphertextBase64, token) => {
   try {
-    kem = await loadMLKEM1024();
-    const ciphertext = new Uint8Array(base64ToArrayBuffer(ciphertextBase64));
-    const secretKey = new Uint8Array(base64ToArrayBuffer(secretKeyBase64));
-
-    const sharedSecret = await kem.decapsulate(ciphertext, secretKey);
-    return new Uint8Array(sharedSecret); // 32 bytes
-  } catch (error) {
-    console.error('Kyber decapsulation error (client-side):', error);
-    throw new Error('Failed to decapsulate with Kyber');
-  } finally {
-    try {
-      if (kem && typeof kem.destroy === 'function') kem.destroy();
-    } catch (e) {
-      console.warn('Error destroying ML-KEM instance (frontend):', e);
+    const API_URL = process.env.REACT_APP_API_URL;
+    if (!API_URL && process.env.NODE_ENV === 'production') {
+      throw new Error('REACT_APP_API_URL is not configured');
     }
+    const baseUrl = API_URL || 'http://localhost:3001';
+
+    const response = await axios.post(
+      `${baseUrl}/api/crypto/kyber/decapsulate`,
+      { ciphertext: ciphertextBase64 },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (!response.data.sharedSecret) {
+      throw new Error('No shared secret returned from server');
+    }
+
+    // Convert base64 back to Uint8Array
+    return new Uint8Array(base64ToArrayBuffer(response.data.sharedSecret));
+  } catch (error) {
+    console.error('Kyber decapsulation error:', error.message);
+    throw new Error('Failed to decapsulate with Kyber: ' + error.message);
   }
 };
 
@@ -351,13 +357,13 @@ export const encryptAndSignMessage = async (
 /**
  * Verify and decrypt a received message
  * @param {object} messageBundle - Encrypted message data
- * @param {string} receiverKyberSecretKey - Receiver's Kyber secret key
+ * @param {string} token - JWT token for authentication
  * @param {string} senderFalconPublicKey - Sender's Falcon public key
  * @returns {Promise<string>} Decrypted plaintext
  */
 export const verifyAndDecryptMessage = async (
   messageBundle,
-  receiverKyberSecretKey,
+  token,
   senderFalconPublicKey
 ) => {
   const { kyberCiphertext, encryptedMessage, iv, authTag, signature } = messageBundle;
@@ -368,7 +374,7 @@ export const verifyAndDecryptMessage = async (
     hasIv: !!iv,
     hasAuthTag: !!authTag,
     hasSignature: !!signature,
-    hasReceiverKey: !!receiverKyberSecretKey,
+    hasToken: !!token,
     hasSenderKey: !!senderFalconPublicKey
   });
   
@@ -377,8 +383,8 @@ export const verifyAndDecryptMessage = async (
     throw new Error('Missing required encryption fields in message bundle');
   }
   
-  if (!receiverKyberSecretKey || !senderFalconPublicKey) {
-    throw new Error('Missing decryption keys');
+  if (!token || !senderFalconPublicKey) {
+    throw new Error('Missing JWT token or sender public key');
   }
   
   // Step 1: Verify Falcon signature (canonical payload)
@@ -391,8 +397,8 @@ export const verifyAndDecryptMessage = async (
     throw new Error('Signature verification failed - message may be tampered');
   }
   
-  // Step 2: Kyber decapsulation - Recover shared secret
-  const sharedSecret = await kyberDecapsulate(kyberCiphertext, receiverKyberSecretKey);
+  // Step 2: Kyber decapsulation via backend - Recover shared secret
+  const sharedSecret = await kyberDecapsulate(kyberCiphertext, token);
   
   // Step 3: AES-256-GCM decryption
   const plaintext = await decryptMessage(encryptedMessage, sharedSecret, iv, authTag);
@@ -910,13 +916,13 @@ export const encryptAndSignFile = async (
 /**
  * Verify and decrypt a received file
  * @param {object} fileBundle - Encrypted file data
- * @param {string} receiverKyberSecretKey - Receiver's Kyber secret key
+ * @param {string} token - JWT token for authentication
  * @param {string} senderFalconPublicKey - Sender's Falcon public key
  * @returns {Promise<Blob>} Decrypted file as Blob
  */
 export const verifyAndDecryptFile = async (
   fileBundle,
-  receiverKyberSecretKey,
+  token,
   senderFalconPublicKey
 ) => {
   const { kyberCiphertext, fileData, iv, authTag, signature, fileName, fileType } = fileBundle;
@@ -929,8 +935,8 @@ export const verifyAndDecryptFile = async (
     throw new Error('File signature verification failed - file may be tampered');
   }
   
-  // Step 2: Kyber decapsulation - Recover shared secret
-  const sharedSecret = await kyberDecapsulate(kyberCiphertext, receiverKyberSecretKey);
+  // Step 2: Kyber decapsulation via backend - Recover shared secret
+  const sharedSecret = await kyberDecapsulate(kyberCiphertext, token);
   
   // Step 3: AES-256-GCM decryption
   const decryptedBase64 = await decryptMessage(fileData, sharedSecret, iv, authTag);
