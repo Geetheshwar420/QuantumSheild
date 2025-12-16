@@ -50,6 +50,11 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
   // Keep ref updated with latest selectedContact and user
   useEffect(() => {
     selectedContactRef.current = selectedContact;
+    console.log('✅ selectedContactRef updated:', {
+      friend_id: selectedContact?.friend_id,
+      username: selectedContact?.username,
+      fullObject: selectedContact
+    });
   }, [selectedContact]);
 
   useEffect(() => {
@@ -141,6 +146,15 @@ const ChatDashboard = ({ user, setIsLoggedIn, setUser }) => {
     
     // Only append messages for the currently selected contact
     const currentContact = selectedContactRef.current;
+    
+    console.log('🔍 Before message relevance check:', {
+      currentContactRef: selectedContactRef.current,
+      currentContactType: typeof selectedContactRef.current,
+      currentContactKeys: selectedContactRef.current ? Object.keys(selectedContactRef.current) : null,
+      currentContactFriendId: selectedContactRef.current?.friend_id,
+      messageSenderId: data.senderId,
+      isMatch: data.senderId === selectedContactRef.current?.friend_id
+    });
     
     // Message is relevant if it's from a known contact (p2p delivery model)
     const isRelevantMessage = true; // We'll validate sender against friends list
