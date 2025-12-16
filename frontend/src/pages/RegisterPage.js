@@ -3,7 +3,12 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 
-const RegisterPage = ({ socket }) => {
+// Normalize API_URL: strip trailing slashes and remove trailing "/api" if present
+const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001')
+  .replace(/\/+$/, '') // Remove trailing slashes
+  .replace(/\/api$/, ''); // Remove trailing "/api" if present
+
+const RegisterPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,11 +21,17 @@ const RegisterPage = ({ socket }) => {
     setError('');
 
     try {
-      const body = password?.length ? { username, password } : { username };
-      await axios.post('http://localhost:3001/api/auth/register', body);
-
-      // Show minimal success and navigate to login; do not auto-login
-      // Optionally store keys securely on client if needed later
+      if (!password) {
+        setError('Password is required');
+        setLoading(false);
+        return;
+      }
+      await axios.post(`${API_URL}/api/auth/register`, { username, password });
+      
+      // Keys are now stored in the database - no need to store in localStorage
+      console.log(`✓ User registered: ${username} (keys stored in database)`);
+      
+      // Navigate to login
       navigate('/login');
     } catch (err) {
       setError(err.response?.data?.msg || 'Registration failed');
@@ -66,9 +77,10 @@ const RegisterPage = ({ socket }) => {
             <div className="relative">
               <input
                 type="password"
-                placeholder="Create a password (optional)"
+                placeholder="Create a password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
                 className="w-full px-4 py-3 rounded-xl bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-whatsapp.primary"
               />
               <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
@@ -77,6 +89,9 @@ const RegisterPage = ({ socket }) => {
                 </svg>
               </div>
             </div>
+            <p className="text-xs text-gray-500 -mt-2">
+              Must be 8+ characters with uppercase, lowercase, number, and special character (@$!%*?&)
+            </p>
             {error && (
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-600 text-sm">
                 {error}
@@ -88,7 +103,7 @@ const RegisterPage = ({ socket }) => {
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl bg-whatsapp.primary text-white font-medium shadow-soft disabled:opacity-60"
+              className="relative z-10 w-full py-3.5 rounded-xl bg-gradient-to-r from-green-600 to-green-500 text-white font-bold text-base shadow-lg hover:shadow-2xl hover:from-green-700 hover:to-green-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-green-700"
             >
               {loading ? 'Registering…' : 'Create account'}
             </motion.button>

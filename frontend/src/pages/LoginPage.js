@@ -2,13 +2,21 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
+import { useSocket } from '../context/SocketContext';
+import { initializeSecureKeys } from '../utils/crypto';
 
-const LoginPage = ({ setIsLoggedIn, setUser, socket }) => {
+// Normalize API_URL: strip trailing slashes and remove trailing "/api" if present
+const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001')
+  .replace(/\/+$/, '') // Remove trailing slashes
+  .replace(/\/api$/, ''); // Remove trailing "/api" if present
+
+const LoginPage = ({ setIsLoggedIn, setUser }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { connectSocket } = useSocket();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -17,25 +25,66 @@ const LoginPage = ({ setIsLoggedIn, setUser, socket }) => {
 
     try {
       let loginResponse;
-      if (password?.length) {
-        // Password-based login
-        loginResponse = await axios.post('http://localhost:3001/api/auth/login', { username, password });
-      } else {
-        // Challenge-based login (fallback)
-        const challengeResponse = await axios.post('http://localhost:3001/api/auth/challenge', { username });
-        const challenge = challengeResponse.data.challenge;
-        const signature = 'simulated_falcon_signature';
-        loginResponse = await axios.post('http://localhost:3001/api/auth/login', { username, challenge, signature });
+      if (!password) {
+        setError('Password is required');
+        return;
       }
+      // Password-based login
+      loginResponse = await axios.post(`${API_URL}/api/auth/login`, { username, password });
 
       // Save token and user to localStorage
-      const { token, userId } = loginResponse.data;
+      const { token, userId, keys } = loginResponse.data;
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify({ id: userId, username }));
+      
+      // Store public keys and securely persist secrets
+      if (keys) {
+        // Secret keys are included in login response for one-time retrieval
+        const kyberSecretKey = keys.kyberSecretKey;
+        const falconSecretKey = keys.falconSecretKey;
+        
+        // Validate secret keys exist before initializing secure storage
+        if (!kyberSecretKey || typeof kyberSecretKey !== 'string' || kyberSecretKey.trim() === '') {
+          console.error('Invalid or missing Kyber secret key');
+          setError('Invalid encryption keys received from server');
+          setLoading(false);
+          return;
+        }
+
+        if (!falconSecretKey || typeof falconSecretKey !== 'string' || falconSecretKey.trim() === '') {
+          console.error('Invalid or missing Falcon secret key');
+          setError('Invalid signature keys received from server');
+          setLoading(false);
+          return;
+        }
+
+        await initializeSecureKeys(username, password, {
+          kyberSecretKey,
+          falconSecretKey,
+          kyberPublicKey: keys.kyberPublicKey,
+          falconPublicKey: keys.falconPublicKey
+        });
+
+        console.log(`✓ Keys securely initialized for user: ${username}`);
+      }
 
       setIsLoggedIn(true);
       setUser({ id: userId, username });
-      navigate('/chat');
+
+      console.log('Login complete, session initialized. Navigating to chat...');
+
+      // Connect socket with authentication after successful login (non-blocking)
+      try {
+        connectSocket(token, userId);
+      } catch (socketError) {
+        console.error('Socket connection failed:', socketError);
+        // User is still logged in, socket will retry via context
+      }
+
+      // Small delay to ensure state updates propagate before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      navigate('/chat', { replace: true });
     } catch (err) {
       setError(err.response?.data?.msg || 'Login failed');
     } finally {
@@ -81,9 +130,10 @@ const LoginPage = ({ setIsLoggedIn, setUser, socket }) => {
             <div className="relative">
               <input
                 type="password"
-                placeholder="Password (optional)"
+                placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
                 className="w-full px-4 py-3 rounded-xl bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-whatsapp.primary"
               />
               <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
@@ -94,7 +144,7 @@ const LoginPage = ({ setIsLoggedIn, setUser, socket }) => {
             </div>
 
             {error && (
-              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-600 text-sm">
+              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-600 text-sm font-medium">
                 {error}
               </motion.p>
             )}
@@ -104,7 +154,7 @@ const LoginPage = ({ setIsLoggedIn, setUser, socket }) => {
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl bg-whatsapp.primary text-white font-medium shadow-soft disabled:opacity-60"
+              className="relative z-10 w-full py-3.5 rounded-xl bg-gradient-to-r from-green-600 to-green-500 text-white font-bold text-base shadow-lg hover:shadow-2xl hover:from-green-700 hover:to-green-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-green-700"
             >
               {loading ? 'Logging in…' : 'Sign in'}
             </motion.button>

@@ -1,14 +1,80 @@
 # QuantumShield: Post-Quantum Secure Chat & File Transfer Application
 
+[![Node.js](https://img.shields.io/badge/Node.js-16%2B-green)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-18-blue)](https://reactjs.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 ## Overview
 
-**QuantumShield** is a full-stack, cross-platform application implementing post-quantum cryptography (PQC) to enable secure messaging, encrypted file sharing, and passwordless authentication. The system uses **CRYSTALS-Kyber** for key exchange and encryption, and **Falcon** for digital signatures and identity verification.
+**QuantumShield** is a production-ready, full-stack application implementing post-quantum cryptography (PQC) for secure messaging, encrypted file sharing, and robust authentication. The system is designed with **CRYSTALS-Kyber** for key exchange and **Falcon** for digital signatures (currently using placeholders with full implementation planned).
 
-The application comprises:
-- **Backend**: Node.js/Express server with WebSocket support (Socket.IO)
-- **Web Frontend**: React application with Tailwind CSS and Framer Motion
-- **Mobile Frontend**: Flutter app for iOS and Android
-- **Database**: SQLite with encryption-at-rest
+### Key Features
+
+✅ **Secure Authentication**
+- Password-based login with complexity validation
+- JWT token-based session management
+- bcrypt password hashing
+
+✅ **Friend Request System**
+- Send/accept/reject friend requests
+- Friend-gated messaging (only friends can chat)
+- Real-time notifications
+
+✅ **Real-time Messaging**
+- WebSocket-based instant messaging
+- Message encryption placeholders
+- Friend-only communication
+
+✅ **File Sharing**
+- Secure file upload/download
+- Friend-gated file access
+- Multer-based file handling
+
+✅ **Modern UI/UX**
+- WhatsApp-inspired two-pane layout
+- Glass-card design with animations
+- Framer Motion transitions
+- Tailwind CSS styling
+
+✅ **Production Ready**
+- Environment-based configuration
+- CORS protection
+- Health check endpoints
+- Graceful shutdown handling
+- PM2 process management support
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js >= 16.0.0
+- npm >= 8.0.0
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/Geetheshwar420/QuantumSheild.git
+cd QuantumSheild
+
+# Backend setup
+cd backend
+npm install
+cp .env.example .env
+npm run dev
+
+# Frontend setup (in new terminal)
+cd frontend
+npm install
+cp .env.example .env
+npm start
+```
+
+**📖 For detailed setup instructions, see [QUICKSTART.md](QUICKSTART.md)**
+
+**🚀 For production deployment, see [DEPLOYMENT.md](DEPLOYMENT.md)**
 
 ---
 

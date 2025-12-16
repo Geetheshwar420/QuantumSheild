@@ -1,11 +1,23 @@
-const express = require('express');
-const db = require('../database/db');
-const { verifyToken } = require('../middleware/authMiddleware');
+import express from 'express';
+import rateLimit from 'express-rate-limit';
+import { db } from '../database/db.js';
+import { verifyToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
+// Rate limiter for friend requests (prevent spam)
+const friendRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour window
+  max: 10, // Max 10 friend requests per hour
+  message: 'Too many friend requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.id?.toString() || req.ip,
+  skipSuccessfulRequests: false // Count all attempts, not just successful ones
+});
+
 // Send a friend request
-router.post('/request', verifyToken, (req, res) => {
+router.post('/request', verifyToken, friendRequestLimiter, (req, res) => {
   const { receiver_username } = req.body;
   const sender_id = req.user.id;
 
@@ -253,4 +265,4 @@ router.get('/check/:friend_id', verifyToken, (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

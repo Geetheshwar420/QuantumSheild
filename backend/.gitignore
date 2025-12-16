@@ -12,10 +12,6 @@ pnpm-debug.log*
 *.db-wal
 quantumshield.db
 
-# Uploaded files (should not be in version control)
-uploads/
-uploads/*
-
 # Environment variables
 .env
 .env.local

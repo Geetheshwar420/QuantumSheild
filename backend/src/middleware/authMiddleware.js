@@ -1,7 +1,21 @@
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'quantum_shield_secret_key_2024';
+// Get current file directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load environment variables from backend root directory
+dotenv.config({ path: join(__dirname, '../../.env') });
+
+// JWT_SECRET is validated at server startup in server.js
+// This will never be undefined/empty because the server exits if it's not set
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '3600'; // 1 hour in seconds
+
+console.log('JWT_SECRET loaded:', JWT_SECRET ? 'Yes ✓' : 'No ✗');
 
 // Verify JWT token and extract user info
 const verifyToken = (req, res, next) => {
@@ -37,7 +51,7 @@ const generateToken = (userId, username) => {
   );
 };
 
-module.exports = {
+export {
   verifyToken,
   generateToken,
   JWT_SECRET,

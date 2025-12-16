@@ -1,0 +1,30 @@
+services:
+  # Backend API Service
+  - type: web
+    name: quantumshield-backend
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: quantumshield-db
+          property: connectionString
+      - key: ALLOWED_ORIGINS
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true
+
+databases:
+  - name: quantumshield-db
+    databaseName: quantumshield
+    user: quantumshield_user
+    plan: free
