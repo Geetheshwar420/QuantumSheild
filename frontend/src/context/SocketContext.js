@@ -55,6 +55,8 @@ export const SocketProvider = ({ children }) => {
       query: {
         userId
       },
+      transports: ['websocket'],
+      upgrade: false,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5

@@ -79,6 +79,30 @@ const base64ToArrayBuffer = (base64) => {
 // ----------------------------------------------------------------------------
 // CANONICAL SIGNATURE PAYLOAD
 // ----------------------------------------------------------------------------
+
+/**
+ * Request Falcon signature from backend using JWT
+ * @param {string} dataToSign - Canonical payload string
+ * @param {string} token - JWT token from localStorage
+ * @returns {Promise<string>} base64 signature
+ */
+const signWithFalconServer = async (dataToSign, token) => {
+  if (!token) {
+    throw new Error('Missing auth token for signing');
+  }
+  try {
+    const res = await axios.post(
+      `${API_URL}/api/crypto/falcon/sign`,
+      { data: dataToSign },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return res.data?.signature;
+  } catch (error) {
+    console.error('Falcon signing failed:', error?.response?.data || error.message);
+    throw new Error('Server-side Falcon signing failed');
+  }
+};
+// ----------------------------------------------------------------------------
 const buildSignaturePayload = (ciphertextBase64, ivBase64, authTagBase64) =>
   JSON.stringify({ c: ciphertextBase64, i: ivBase64, t: authTagBase64 });
 
@@ -246,34 +270,7 @@ const decryptMessage = async (ciphertextBase64, sharedSecret, ivBase64, authTagB
   }
 };
 
-// ----------------------------------------------------------------------------
-// FALCON DIGITAL SIGNATURES (CLIENT-SIDE IMPLEMENTATION)
-// ----------------------------------------------------------------------------
-
-/**
- * Sign data with Falcon
- * CLIENT-SIDE ONLY: Never transmit secret keys to the server
- */
-const signWithFalcon = async (data, secretKeyBase64) => {
-  let sig;
-  try {
-    sig = await loadFalcon1024();
-    const secretKey = new Uint8Array(base64ToArrayBuffer(secretKeyBase64));
-    const message = new TextEncoder().encode(data);
-
-    const signature = await sig.sign(message, secretKey);
-    return arrayBufferToBase64(signature);
-  } catch (error) {
-    console.error('Falcon signing error (client-side):', error);
-    throw new Error('Failed to sign with Falcon');
-  } finally {
-    try {
-      if (sig && typeof sig.destroy === 'function') sig.destroy();
-    } catch (e) {
-      console.warn('Error destroying Falcon instance (frontend):', e);
-    }
-  }
-};
+// Client-side Falcon signing removed in favor of server-side signing
 
 /**
  * Verify Falcon signature
@@ -334,9 +331,10 @@ export const encryptAndSignMessage = async (
     sharedSecret
   );
   
-  // Step 3: Falcon signature (canonical payload)
+  // Step 3: Falcon signature via server (canonical payload)
   const dataToSign = buildSignaturePayload(encryptedMessage, iv, authTag);
-  const signature = await signWithFalcon(dataToSign, senderFalconSecretKey);
+  const token = localStorage.getItem('token');
+  const signature = await signWithFalconServer(dataToSign, token);
   
   return {
     kyberCiphertext,
@@ -889,9 +887,10 @@ export const encryptAndSignFile = async (
     sharedSecret
   );
   
-  // Step 3: Falcon signature (canonical payload)
+  // Step 3: Falcon signature via server (canonical payload)
   const dataToSign = buildSignaturePayload(encryptedFileData, iv, authTag);
-  const signature = await signWithFalcon(dataToSign, senderFalconSecretKey);
+  const token = localStorage.getItem('token');
+  const signature = await signWithFalconServer(dataToSign, token);
   
   return {
     fileName: file.name,
