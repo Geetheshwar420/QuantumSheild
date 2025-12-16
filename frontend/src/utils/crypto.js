@@ -284,10 +284,13 @@ const verifyWithFalcon = async (data, signatureBase64, publicKeyBase64) => {
       publicKeyLength: publicKeyBase64?.length
     });
     
+    const token = localStorage.getItem('token');
     const response = await axios.post(`${API_URL}/api/crypto/falcon/verify`, {
       message: data,
       signature: signatureBase64,
       publicKey: publicKeyBase64
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
     });
     
     return response.data.isValid;
