@@ -72,6 +72,7 @@ const RegisterPage = () => {
                 placeholder="Choose a username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
                 className="w-full px-4 py-3 rounded-xl bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-whatsapp.primary"
               />
               <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
@@ -88,6 +89,7 @@ const RegisterPage = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="new-password"
                 className="w-full px-4 py-3 rounded-xl bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-whatsapp.primary"
               />
               <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
